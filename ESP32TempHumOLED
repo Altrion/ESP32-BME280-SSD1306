@@ -1,0 +1,131 @@
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
+
+// OLED display dimensions
+#define SEALEVELPRESSURE_HPA (1013.25)
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+
+
+
+// Initialize the display and sensor
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+Adafruit_BME280 bme;
+
+int sectionChangeInterval=10000; // 10 Seconds to change Screen
+int sensorUpdateInterval= 2000; // 2 Seconds to update Sensor
+
+int currentSection=0;
+long lastSectionChange,lastSensorUpdate;
+
+
+void setup() {
+  Serial.begin(115200);
+
+  Wire.setPins(5, 4);
+  Wire.begin();
+
+    if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C, false, false)) { 
+      Serial.println(F("SSD1306 allocation failed"));
+      while(true);
+  }
+
+  if (!bme.begin(0x76)) {  
+    Serial.println(F("Could not find a valid BME280 sensor, check wiring!"));
+    while(true);
+  }
+  display.clearDisplay(); 
+  display.setTextColor(WHITE);    
+
+}
+
+void loop() {
+
+  pirState = digitalRead(pirPin);
+  unsigned long currentMillis = millis();
+  if(currentMillis>=lastSectionChange+sectionChangeInterval || currentMillis>=lastSensorUpdate+sensorUpdateInterval) {
+    Wire.beginTransmission(0x76);
+    byte error = Wire.endTransmission();
+    if (error == 4) { 
+        drawError();
+        return;
+    }
+    if(currentMillis>=lastSectionChange+sectionChangeInterval) {
+      lastSectionChange=currentMillis;
+
+      if(currentSection==1) currentSection=0; 
+      else
+      if(currentSection==0) currentSection=1;
+      else {
+        drawError();
+        return;
+      }
+    }
+    lastSensorUpdate=currentMillis;
+    display.clearDisplay();
+    drawText(currentSection);
+    drawSectionBar(currentSection);
+
+    display.display();
+  }
+}
+
+void drawError() {
+  display.clearDisplay();
+  display.setTextSize(3);
+  display.print("Error");
+
+  display.display();
+
+}
+void drawText(int section) {
+  if(section==0) {
+    display.setTextSize(2);
+    display.setCursor(0, 20);       
+    display.print("Temp ");
+    display.print(bme.readTemperature());
+    display.setTextSize(1);   
+    display.println("c");     
+
+    display.setTextSize(2);
+    display.setCursor(0, 40);       
+    display.print("Hum  ");
+    display.print(bme.readHumidity());
+    display.setTextSize(1);   
+    display.println("%");
+  }
+  if(section==1) {
+    display.setTextSize(2);
+    display.setCursor(0, 40);       
+    display.print("Alt ");
+    display.print(bme.readAltitude(SEALEVELPRESSURE_HPA));
+    display.setTextSize(1);   
+    display.println("m");
+
+    display.setTextSize(2);
+    display.setCursor(0, 20);       
+    display.print("Pre ");
+    display.print(bme.readPressure() / 100.0F);
+    display.setTextSize(1);   
+    display.println("h");     
+  }
+}
+void drawSectionBar(int section) {
+  if(section==0) { 
+    display.fillRoundRect(20, 2, 40, 10,
+      display.height()/4, SSD1306_WHITE);
+
+    display.drawRoundRect(128-60, 2, 40, 10,
+      display.height()/4, SSD1306_WHITE);
+  }
+  if(section==1) {
+    display.drawRoundRect(20, 2, 40, 10,
+      display.height()/4, SSD1306_WHITE);
+    display.fillRoundRect(128-60, 2, 40, 10,
+      display.height()/4, SSD1306_WHITE);
+  }
+}
